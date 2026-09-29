@@ -1,8 +1,8 @@
 # 🛡️ Blue Team Home Lab - Phase 1: Linux Detection Engineering with Wazuh
 
-A self-built, fully isolated cybersecurity lab where I launch real attacks against my own systems and then **detect, investigate, and write custom detection rules** for them in a SIEM - the core daily loop of a SOC analyst / detection engineer.
+A self-built, fully isolated cybersecurity lab where I launch real attacks against my own systems and then **detect, investigate, and write custom detection rules** for them in a SIEM.
 
-**Phase 1** is a Linux detection lab built around **Wazuh**: three attack classes executed from Kali against a monitored Ubuntu server, each detected end-to-end, plus a **custom detection rule I wrote and validated** and a **new log source I onboarded** myself.
+**Phase 1** is a Linux detection lab built around **Wazuh**: three attack classes executed from Kali against a monitored Ubuntu server, each detected end-to-end, plus a custom detection rule I wrote and validated and a new log source I onboarded myself.
 
 ![Wazuh severity dashboard](screenshots/00-dashboard-severity.png)
 *24-hour alert summary after the exercises: 2 critical, 166 high, 1,789 medium, 13,041 low.*
@@ -16,7 +16,7 @@ A self-built, fully isolated cybersecurity lab where I launch real attacks again
 | **Focus** | Blue team (detection & response), with offensive actions used only to generate telemetry to detect. |
 | **SIEM** | Wazuh 4.14 |
 | **Platform** | VMware Workstation on a single 16 GB laptop, fully isolated host-only network |
-| **Status** | Phase 1 complete ✅ |
+| **Status** | Phase 1 complete |
 
 >  **Ethics & scope:** Every action in this lab targets machines I own, on an isolated network with no internet route. Attack tools were used solely to produce logs so I could practise detecting them.
 
