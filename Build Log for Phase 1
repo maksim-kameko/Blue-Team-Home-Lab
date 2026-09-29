@@ -1,0 +1,111 @@
+# 🛠️ Build Log — Blue Team Home Lab (Phase 1)
+
+A chronological record of building the lab: the steps, the problems hit, and how each was diagnosed and fixed. This is the "how it actually went" companion to the polished README.
+
+---
+
+## Host machine
+
+- Windows 11 laptop, Intel i5-11400H (6 cores / 12 threads), 16 GB RAM
+- Hypervisor: VMware Workstation
+- Constraint: 16 GB RAM is the limiting factor, so VM memory was budgeted carefully (SIEM 6 GB, victim 2 GB, Kali 2 GB ≈ 10 GB, leaving headroom for the host)
+
+## Host prep and networking
+
+**Virtualization / hypervisor conflict.**
+`systeminfo | findstr /i "hyper-v"` reported *"A hypervisor has been detected"* — WSL2 (with a Kali distro) was keeping the Windows hypervisor on, which competes with VMware for hardware virtualization.
+
+- Decision: I don't need the WSL Kali, so I disabled the Windows hypervisor features (`VirtualMachinePlatform`, WSL, `HypervisorPlatform`) via DISM and `bcdedit /set hypervisorlaunchtype off`.
+- Later reconsidered **Memory Integrity (HVCI)**: rather than disabling a real security feature for a small performance gain, I left it ON and ran VMware in coexistence mode. None of the lab VMs need nested virtualization, so coexistence is fine.
+- **Lesson:** VMware and the Windows hypervisor can coexist; only disable Memory Integrity if performance genuinely suffers.
+
+**Isolated network.**
+Created a VMware **host-only** network, `VMnet2` = `10.0.0.0/24`, no internet route. A second **NAT** adapter was added to VMs only during installation, then disconnected to keep the lab air-gapped.
+
+---
+
+## SIEM server (siem01)
+
+- Built Ubuntu Server VM: 6 GB RAM, 4 vCPU, 50 GB disk, NIC on VMnet2 + temporary NAT.
+- **Wrong Ubuntu version caught early.** On the installer's mirror screen I noticed the codename **`resolute`** in the apt log — that's Ubuntu **26.04**, which Wazuh 4.14 does not officially support. Rolled back to **24.04 LTS (`noble`)** by swapping the ISO.
+  - **Lesson:** always check the compatibility matrix; the installer's codename is a quick tell for the release.
+- **Static IP gotcha:** set `ens33` to `10.0.0.10/24` with **no gateway** (so the default route stays on the NAT adapter). A gateway on the lab NIC would have broken package downloads.
+- **Disk gotcha:** the installer only allocated ~half the disk to `ubuntu-lv` by default — expanded the LVM volume to full size so Wazuh had room.
+- Installed Wazuh 4.14 all-in-one:
+  ```
+  curl -sO https://packages.wazuh.com/4.14/wazuh-install.sh && sudo bash ./wazuh-install.sh -a
+  ```
+  Saved the generated admin password. Dashboard reachable at `https://10.0.0.10` from the Windows host (self-signed cert warning is expected).
+
+
+## Monitored host (victim01)
+
+- Built Ubuntu Server VM: 2 GB RAM, static IP `10.0.0.20`, OpenSSH enabled.
+- **Wazuh agent install hiccup:** `dpkg` failed with `cannot access archive './wazuh-agent_...deb~'` — a stray `~` had been copied onto the filename. Verified the real filename with `ls`, re-ran the install cleanly.
+- Agent came up **Active** in the dashboard (Ubuntu 24.04.5, agent v4.14.8).
+
+
+## Attacker (Kali)
+
+- Imported the prebuilt Kali VMware image, set its NIC to **VMnet2 only** (no NAT) — a genuinely air-gapped attacker. The prebuilt image already ships hydra, nmap, gobuster, nikto, sqlmap and the rockyou wordlist, so no internet was needed.
+- **Cursor invisible** in the VMware console after import (known VMware Tools quirk) — resolved via a fix found on Reddit. From then on I worked over SSH from Windows Terminal anyway.
+
+
+## Exercise 1: SSH brute force → custom rule
+
+- Recon: `nmap -sV 10.0.0.20` → port 22, OpenSSH 9.6p1.
+- Created a **deliberately weak** test user (`jan : password123`) so the admin account stayed safe and I controlled exactly what was crackable.
+- Brute force: `hydra -l jan -P rockyou.txt ssh://10.0.0.20`.
+  - **Observation:** full rockyou over SSH was projected at **900+ hours** (~262 tries/min) — OpenSSH's connection limits are themselves a mild brute-force defense. Used a short wordlist to demonstrate the actual crack, while the initial run supplied plenty of failed-login volume for detection.
+- Detection: Wazuh flagged the failed-login flood ("Multiple authentication failures", etc.), all attributed to `data.srcip 10.0.0.130`, user in `data.dstuser`.
+  - **Field lesson:** for OpenSSH the target user lands in `data.dstuser`, not `data.srcuser`.
+
+**Custom rule authoring (the main event):**
+- First attempt failed validation:
+  `wazuh-analysisd -t` → *Invalid attribute "same_source_ip"*.
+  - **Fix:** `same_source_ip` is a rule **element** (`<same_source_ip />`), not an attribute of `<rule>`.
+- Also switched `if_sid` → `if_matched_group` so the composite counts across whatever failed-auth rule fires, and made it frequency-based (6 in 60s).
+- Note: `wazuh-logtest -t` doesn't exist in this version; the correct config test is `wazuh-analysisd -t`.
+- After restart, rule `100100` (level 12, MITRE T1110) fired.
+  - **Gotcha:** at first it "didn't fire" — actually it was hidden by a `rule.level: 7 to 11` filter in the dashboard. My level-12 alert was outside that range.
+  - **Lesson:** "no results" usually means a filtered *view*, not a failed detection.
+- Verified count later: rule `100100` fired **64 times**.
+
+
+## Exercise 2: Web scanning → new log source
+
+- Installed Apache on victim01, added an "interesting" `/admin/` path.
+- Attacks: `gobuster` (directory brute force) and `nikto` (vuln scan).
+- **Log source onboarding:** Wazuh wasn't watching web traffic. Added a `<localfile>` block for `/var/log/apache2/access.log` on the agent.
+  - **Permission gotcha:** the `wazuh` agent user couldn't read the log until added to the `adm` group (`usermod -a -G adm wazuh`), then restarted the agent.
+- Detection: ~8,900 web alerts (the classic wall of 400/404s), plus Nikto's Shellshock probe caught as a **critical level-15 CVE-2014-6271** alert.
+
+
+## Exercise 3: SQL injection (sqlmap + DVWA)
+
+- Stood up DVWA (Apache + PHP + MariaDB + git clone), set security to Low.
+- **DVWA 500 on DB setup.** The Apache error log (`/var/log/apache2/error.log`) pinpointed `Access denied for user 'dvwa'@'localhost'`.
+  - **Root cause:** two things — MySQL treats `localhost` (socket) and `127.0.0.1` (TCP) as different hosts, and the original chained `mysql -e` had aborted after the first statement failed, so the DB user never got created with the right password.
+  - **Fix:** idempotent `CREATE USER IF NOT EXISTS` + `ALTER USER ... IDENTIFIED BY` for `dvwa'@'localhost'`.
+  - **Lesson:** read the actual error log; `localhost` ≠ `127.0.0.1` in MySQL.
+- Attack: `sqlmap ... --batch --dbs` confirmed `id` injectable (time-based blind + UNION), enumerated databases, then `--dump` pulled the `users` table and cracked the hashes (admin/password, gordonb/abc123, 1337/charley, pablo/letmein, smithy/password).
+- Detection: ~9,800 web alerts where `data.url` contained the raw injection — including the query extracting the `password` column from `dvwa.users`.
+  - **Analyst takeaway:** even a blind injection's payload is fully recorded in the URL, so a defender can reconstruct exactly what was targeted. Web-log retention matters.
+
+
+## Verified detection counts (measured in Wazuh)
+
+| Query | Result |
+|---|---|
+| `rule.id:100100` (custom rule) | 64 |
+| `data.srcip:10.0.0.130 and rule.groups:web and not data.url:*sqli*` | ~4,006 |
+| `data.srcip:10.0.0.130 and data.url:*sqli*` | ~9,750 |
+| `rule.level >= 12 and <= 14` (high severity) | 166 |
+
+## Key takeaways
+
+- Reading errors carefully (analysisd validation, Apache error log) solved every blocker faster than guessing.
+- "No detection" was twice actually "filtered view" or "wrong field name" - knowing your SIEM's fields and filters is core.
+- Building it by hand surfaced real operational lessons (version compat, IP/route config, log permissions) that a pre-built lab would have hidden.
+
+*Next: Phase 2 — add a Windows Active Directory domain controller and detect Kerberoasting / AS-REP roasting.*
