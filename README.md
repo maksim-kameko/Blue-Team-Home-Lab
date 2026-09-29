@@ -1,6 +1,6 @@
-# 🛡️ Blue Team Home Lab — Phase 1: Linux Detection Engineering with Wazuh
+# 🛡️ Blue Team Home Lab - Phase 1: Linux Detection Engineering with Wazuh
 
-A self-built, fully isolated cybersecurity lab where I launch real attacks against my own systems and then **detect, investigate, and write custom detection rules** for them in a SIEM — the core daily loop of a SOC analyst / detection engineer.
+A self-built, fully isolated cybersecurity lab where I launch real attacks against my own systems and then **detect, investigate, and write custom detection rules** for them in a SIEM - the core daily loop of a SOC analyst / detection engineer.
 
 **Phase 1** is a Linux detection lab built around **Wazuh**: three attack classes executed from Kali against a monitored Ubuntu server, each detected end-to-end, plus a **custom detection rule I wrote and validated** and a **new log source I onboarded** myself.
 
@@ -23,13 +23,13 @@ A self-built, fully isolated cybersecurity lab where I launch real attacks again
 
 ##  Skills Demonstrated
 
-- **SIEM operation** — deployed and operated Wazuh end-to-end: manager, agents, dashboards, alert triage
-- **Detection engineering** — wrote, validated, and tuned a **custom Wazuh rule** (composite, frequency-based, same-source-IP)
-- **Log source onboarding** — added a new telemetry source (Apache access logs) to the SIEM and fixed the agent read-permission issue
-- **Threat hunting** — pivoted on `srcip`, rule groups, and time windows to reconstruct attacks from raw events
-- **MITRE ATT&CK mapping** — tied every detection to techniques (T1110, T1595, T1190)
-- **Adversary emulation** — Nmap, Hydra, Gobuster, Nikto, sqlmap
-- **Infrastructure** — VMware host-only networking, static IP addressing, VM snapshots
+- **SIEM operation** - deployed and operated Wazuh end-to-end: manager, agents, dashboards, alert triage
+- **Detection engineering** - wrote, validated, and tuned a **custom Wazuh rule** (composite, frequency-based, same-source-IP)
+- **Log source onboarding** - added a new telemetry source (Apache access logs) to the SIEM and fixed the agent read-permission issue
+- **Threat hunting** - pivoted on `srcip`, rule groups, and time windows to reconstruct attacks from raw events
+- **MITRE ATT&CK mapping** - tied every detection to techniques (T1110, T1595, T1190)
+- **Adversary emulation** - Nmap, Hydra, Gobuster, Nikto, sqlmap
+- **Infrastructure** - VMware host-only networking, static IP addressing, VM snapshots
 
 
 ## Architecture
@@ -56,7 +56,7 @@ All hosts sit on an **isolated host-only network (`10.0.0.0/24`, VMnet2)** with 
    │                            │  Wazuh 4.14 SIEM   │             │
    │                            │  10.0.0.10         │             │
    │                            └────────────────────┘             │
-   │          Host-Only Network — VMnet2 — 10.0.0.0/24 (no WAN)     │
+   │          Host-Only Network - VMnet2 - 10.0.0.0/24 (no WAN)     │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -67,7 +67,7 @@ All hosts sit on an **isolated host-only network (`10.0.0.0/24`, VMnet2)** with 
 | `attacker01` | Offensive toolkit | Kali Linux | 10.0.0.130 | 2 GB / 4 vCPU |
 
 ![VMware host-only network](screenshots/01-vmnet2-network.png)
-*Isolated host-only network (VMnet2, 10.0.0.0/24) — the lab has no internet route.*
+*Isolated host-only network (VMnet2, 10.0.0.0/24) - the lab has no internet route.*
 
 
 ##  Lab Build
@@ -96,12 +96,12 @@ All hosts sit on an **isolated host-only network (`10.0.0.0/24`, VMnet2)** with 
 
 ![Deploy agent wizard](screenshots/10-agent-deploy-wizard.png)
 ![Agent active](screenshots/11-victim01-agent-active.png)
-*Wazuh agent deployed to victim01 and reporting to the manager — status **Active**, Ubuntu 24.04.5, agent v4.14.8.*
+*Wazuh agent deployed to victim01 and reporting to the manager - status **Active**, Ubuntu 24.04.5, agent v4.14.8.*
 
 ### Attacker (`attacker01`)
 
 ![Kali VM settings](screenshots/12-kali-vm-settings.png)
-*Kali attacker on VMnet2 only — no NAT, so the attacker is fully air-gapped from the internet.*
+*Kali attacker on VMnet2 only - no NAT, so the attacker is fully air-gapped from the internet.*
 
 
 ##  Detection Exercises
@@ -171,15 +171,15 @@ nikto -h http://10.0.0.20
 sudo usermod -a -G adm wazuh && sudo systemctl restart wazuh-agent
 ```
 
-**Detect.** The scan generated **~8,900 web alerts** from a single source — the classic "wall of 400/404s"  and Nikto's Shellshock probe was caught as a **critical (level 15) CVE-2014-6271 alert**.
+**Detect.** The scan generated **~8,900 web alerts** from a single source - the classic "wall of 400/404s"  and Nikto's Shellshock probe was caught as a **critical (level 15) CVE-2014-6271 alert**.
 
 ![Wazuh web scan](screenshots/20-wazuh-web-scan.png)
-*~8,900 web-server error alerts from 10.0.0.130 — automated scanning, plainly visible.*
+*~8,900 web-server error alerts from 10.0.0.130 - automated scanning, plainly visible.*
 
 **MITRE ATT&CK:** `T1595` Active Scanning · `T1190` Exploit Public-Facing Application (Shellshock)
 
 
-### Exercise 3 — SQL Injection with sqlmap
+### Exercise 3 - SQL Injection with sqlmap
 
 **Attack.** Automated SQL injection against DVWA, dumping the user table.
 
@@ -197,12 +197,12 @@ sqlmap -u "...same URL..." --cookie="..." --batch -D dvwa -T users --dump
 *`id` parameter confirmed injectable (time-based blind + UNION); databases enumerated.*
 
 ![sqlmap dumps and cracks credentials](screenshots/24-sqlmap-dump.png)
-*The `users` table dumped — and sqlmap cracked the hashes (admin/password, gordonb/abc123, 1337/charley, pablo/letmein, smithy/password).*
+*The `users` table dumped - and sqlmap cracked the hashes (admin/password, gordonb/abc123, 1337/charley, pablo/letmein, smithy/password).*
 
-**Detect.** sqlmap's payloads landed **directly in the web logs** — Wazuh captured **~9,814 alerts** where `data.url` contains the raw injection (`UNION ALL SELECT ... FROM information_schema`, and one extracting the `password` column from `dvwa.users`).
+**Detect.** sqlmap's payloads landed **directly in the web logs** - Wazuh captured **~9,814 alerts** where `data.url` contains the raw injection (`UNION ALL SELECT ... FROM information_schema`, and one extracting the `password` column from `dvwa.users`).
 
 ![Wazuh SQLi detection](screenshots/25-wazuh-sqli.png)
-*The attacker's SQL payloads captured verbatim in the SIEM — including the query stealing the password column.*
+*The attacker's SQL payloads captured verbatim in the SIEM - including the query stealing the password column.*
 
 **Analyst takeaway:** even for a *blind* injection, the full payload is recorded in the URL, so a defender can reconstruct exactly what data the attacker attempted to exfiltrate. Web-log retention matters.
 
@@ -214,21 +214,21 @@ sqlmap -u "...same URL..." --cookie="..." --batch -D dvwa -T users --dump
 
 | Tactic | Technique | Exercise |
 |---|---|---|
-| Credential Access | T1110 — Brute Force | SSH brute force (+ custom rule) |
-| Reconnaissance | T1595 — Active Scanning | Gobuster / Nikto |
-| Initial Access | T1190 — Exploit Public-Facing Application | Shellshock, SQL injection |
+| Credential Access | T1110 - Brute Force | SSH brute force (+ custom rule) |
+| Reconnaissance | T1595 - Active Scanning | Gobuster / Nikto |
+| Initial Access | T1190 - Exploit Public-Facing Application | Shellshock, SQL injection |
 
 
 ## Lessons Learned
 
-The real problems I hit and solved — the most valuable part of the project:
+The real problems I hit and solved - the most valuable part of the project:
 
 - **`same_source_ip` is a rule *element*, not an attribute.** `wazuh-analysisd -t` rejected my first rule; reading the validation error taught me the correct XML structure.
 - **"No results" usually means a filtered *view*, not a failed detection.** My level-12 alert was invisible until I removed a `rule.level: 7 to 11` filter that was hiding it.
 - **`localhost` vs `127.0.0.1` are different hosts to MySQL.** DVWA threw a 500 on DB setup; the Apache error log pinpointed `Access denied for 'dvwa'@'localhost'`, caused by a grant/host mismatch and a chained `mysql -e` aborting after the first failed statement.
-- **SSH brute force is slow by design.** Full rockyou over SSH was projected at 900+ hours — OpenSSH's connection limits are themselves a mild defense. I used a short list to demonstrate the crack while the initial run supplied the failed-login volume for detection.
+- **SSH brute force is slow by design.** Full rockyou over SSH was projected at 900+ hours - OpenSSH's connection limits are themselves a mild defense. I used a short list to demonstrate the crack while the initial run supplied the failed-login volume for detection.
 - **Log onboarding needs permissions, not just config.** The `wazuh` agent user had to join the `adm` group to read Apache logs before events flowed.
-- **Version compatibility matters.** I initially grabbed the newest Ubuntu (26.04) but rolled back to 24.04 LTS, which Wazuh 4.14 officially supports — caught it by spotting the `resolute` codename in the installer.
+- **Version compatibility matters.** I initially grabbed the newest Ubuntu (26.04) but rolled back to 24.04 LTS, which Wazuh 4.14 officially supports - caught it by spotting the `resolute` codename in the installer.
 
 
 ## Repository Structure
