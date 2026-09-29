@@ -1,0 +1,25 @@
+<!--
+  Custom Wazuh detection rules — Blue Team Home Lab (Phase 1)
+  Location on the manager: /var/ossec/etc/rules/local_rules.xml
+  Validate with:  sudo /var/ossec/bin/wazuh-analysisd -t
+  Apply with:     sudo systemctl restart wazuh-manager
+-->
+<group name="local,syslog,sshd,">
+
+  <!--
+    SSH brute-force detection (composite).
+    Fires only when 6+ failed authentications come from the SAME source IP
+    within a 60-second window. Higher severity (level 12) than the built-in
+    brute-force rule so it stands out, and tagged to MITRE ATT&CK T1110.
+  -->
+  <rule id="100100" level="12" frequency="6" timeframe="60">
+    <if_matched_group>authentication_failed</if_matched_group>
+    <same_source_ip />
+    <description>SSH brute force: 6+ login attempts from the same IP in 60s (srcip $(srcip), user $(dstuser))</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>authentication_failed</group>
+  </rule>
+
+</group>
