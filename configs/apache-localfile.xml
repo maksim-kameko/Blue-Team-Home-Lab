@@ -1,0 +1,13 @@
+<!--
+  Log source onboarding — Blue Team Home Lab (Phase 1)
+  Added on the AGENT (victim01): /var/ossec/etc/ossec.conf
+  Tells the Wazuh agent to ship the Apache access log to the manager.
+
+  NOTE: the 'wazuh' agent user must be able to read the log:
+      sudo usermod -a -G adm wazuh
+      sudo systemctl restart wazuh-agent
+-->
+<localfile>
+  <log_format>apache</log_format>
+  <location>/var/log/apache2/access.log</location>
+</localfile>
